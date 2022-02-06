@@ -1,0 +1,131 @@
+import BigNumber from 'bignumber.js'
+import React, { useCallback, useMemo, useState } from 'react'
+import styled from 'styled-components'
+import { Button, Modal } from '@pancakeswap-libs/uikit'
+import { getFullDisplayBalance } from 'utils/formatBalance'
+import TicketInput from 'components/TicketInput'
+import ModalActions from 'components/ModalActions'
+import { useMultiBuyLottery } from 'hooks/useBuyLottery'
+import useI18n from 'hooks/useI18n'
+// import { usePriceANMPBusd } from 'state/hooks'
+
+interface BuyTicketModalProps {
+  max: BigNumber
+  onConfirm?: (amount: string, numbers: Array<number>) => void
+  onDismiss?: () => void
+  tokenName?: string
+}
+
+const BuyTicketModal: React.FC<BuyTicketModalProps> = ({ max, onDismiss }) => {
+  const [val, setVal] = useState('1')
+  const [pendingTx, setPendingTx] = useState(false)
+  const [, setRequestedBuy] = useState(false)
+  const TranslateString = useI18n()
+  // const priceANMP = usePriceANMPBusd()
+  // const ticketPrice = new BigNumber(1)
+  const fullBalance = useMemo(() => {
+    // return getFullDisplayBalance(max, 9) // hms_decimal
+    return getFullDisplayBalance(max)
+  }, [max])
+
+  const maxTickets = useMemo(() => {
+    // return parseInt(getFullDisplayBalance(max.div(new BigNumber(ticketPrice)), 9))  // hms_decimal
+    return parseInt(getFullDisplayBalance(max))
+  }, [max])
+
+  const handleChange = (e: React.FormEvent<HTMLInputElement>) => setVal(e.currentTarget.value)
+
+  const { onMultiBuy } = useMultiBuyLottery()
+  const handleBuy = useCallback(async () => {
+    try {
+      setRequestedBuy(true)
+      const length = parseInt(val)
+      // @ts-ignore
+      // eslint-disable-next-line prefer-spread
+      const txHash = await onMultiBuy('1', length)
+      // user rejected tx or didn't go thru
+      if (txHash) {
+        setRequestedBuy(false)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }, [onMultiBuy, setRequestedBuy, val])
+
+  const handleSelectMax = useCallback(() => {
+    if (Number(maxTickets) > 4) {
+      setVal('4')
+    } else {
+      setVal(maxTickets.toString())
+    }
+  }, [maxTickets])
+
+  const USDTCosts = (amount: string): number => {
+    return +amount
+  }
+  return (
+    <Modal title={TranslateString(450, 'Enter amount of tickets to buy')} onDismiss={onDismiss}>
+      <TicketInput
+        value={val}
+        onSelectMax={handleSelectMax}
+        onChange={handleChange}
+        max={fullBalance}
+        symbol="TICKET"
+        availableSymbol="USDT"
+      />
+      <div>
+        <Tips>Your amount must be a multiple of 1 USDT</Tips>
+        <Tips>1 Ticket = 1 USDT</Tips>
+      </div>
+      <div>
+        <Announce>
+          {TranslateString(
+            999,
+            'Ticket purchases are final. Your USDT cannot be returned to you after buying tickets.',
+          )}
+        </Announce>
+        <Final>{TranslateString(999, `You will spend: ${USDTCosts(val)} USDT`)}</Final>
+      </div>
+      <ModalActions>
+        <Button fullWidth variant="secondary" onClick={onDismiss}>
+          {TranslateString(462, 'Cancel')}
+        </Button>
+        <Button
+          id="lottery-buy-complete"
+          fullWidth
+          disabled={pendingTx || parseInt(val) > Number(maxTickets) || parseInt(val) > 4 || parseInt(val) < 1}
+          onClick={async () => {
+            setPendingTx(true)
+            await handleBuy()
+            setPendingTx(false)
+            onDismiss()
+          }}
+        >
+          {pendingTx ? TranslateString(488, 'Pending Confirmation') : TranslateString(464, 'Confirm')}
+        </Button>
+      </ModalActions>
+    </Modal>
+  )
+}
+
+export default BuyTicketModal
+
+const Tips = styled.div`
+  margin-left: 0.4em;
+  font-size: 14px;
+  font-weight: 600;
+  color: ${(props) => props.theme.colors.primary};
+`
+
+const Final = styled.div`
+  margin-top: 1em;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: ${(props) => props.theme.colors.primary};
+`
+const Announce = styled.div`
+  margin-top: 1em;
+  margin-left: 0.4em;
+  color: #ed4b9e;
+`
